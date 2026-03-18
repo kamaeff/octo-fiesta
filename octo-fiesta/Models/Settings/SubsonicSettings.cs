@@ -54,7 +54,14 @@ public enum StorageMode
     /// Files are stored in a temporary cache and automatically cleaned up
     /// Not registered in the database, no Navidrome scan triggered
     /// </summary>
-    Cache
+    Cache,
+
+    /// <summary>
+    /// Streamed files are stored in a temporary cache and automatically cleaned up.
+    /// Starring a track, album or playlist downloads them into permanent storage
+    /// and registers them in the databas.
+    /// </summary>
+    Hybrid,
 }
 
 /// <summary>

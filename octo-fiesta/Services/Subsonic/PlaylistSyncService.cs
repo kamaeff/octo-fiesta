@@ -184,7 +184,7 @@ public class PlaylistSyncService
                     AddTrackToPlaylistCache(trackId, playlistId);
                     
                     _logger.LogInformation("Downloading track '{Artist} - {Title}'", track.Artist, track.Title);
-                    var localPath = await downloadService.DownloadSongAsync(provider, track.ExternalId, cancellationToken);
+                    var localPath = await downloadService.DownloadSongToPermanentStorageAsync(provider, track.ExternalId, cancellationToken);
                     
                     downloadedTracks.Add((track, localPath));
                     _logger.LogDebug("Downloaded: {Path}", localPath);

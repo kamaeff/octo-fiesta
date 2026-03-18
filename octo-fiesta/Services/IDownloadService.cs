@@ -19,6 +19,16 @@ public interface IDownloadService
     /// <param name="cancellationToken">Cancellation token</param>
     /// <returns>The path to the downloaded file</returns>
     Task<string> DownloadSongAsync(string externalProvider, string externalId, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Downloads a song from an external provider in background.
+    /// In Hybrid and Permanent storage modes songs are stored in permanent storage.
+    /// </summary>
+    /// <param name="externalProvider">The provider (deezer, spotify)</param>
+    /// <param name="externalId">The ID on the external provider</param>
+    /// <param name="cancellationToken">Cancellation token</param>
+    /// <returns></returns>
+    public Task<string> DownloadSongToPermanentStorageAsync(string externalProvider, string externalId, CancellationToken cancellationToken = default);
     
     /// <summary>
     /// Downloads a song and streams the result progressively

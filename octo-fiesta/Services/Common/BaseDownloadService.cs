@@ -98,13 +98,31 @@ public abstract class BaseDownloadService : IDownloadService
 
     public async Task<string> DownloadSongAsync(string externalProvider, string externalId, CancellationToken cancellationToken = default)
     {
-        return await DownloadSongInternalAsync(externalProvider, externalId, triggerAlbumDownload: true, cancellationToken);
+        return await DownloadSongInternalAsync(externalProvider, externalId, triggerAlbumDownload: true, preferPermanentStorage: false, cancellationToken);
     }
 
     public async Task<Stream> DownloadAndStreamAsync(string externalProvider, string externalId, CancellationToken cancellationToken = default)
     {
-        var localPath = await DownloadSongInternalAsync(externalProvider, externalId, triggerAlbumDownload: true, cancellationToken);
+        var localPath = await DownloadSongInternalAsync(externalProvider, externalId, triggerAlbumDownload: true, preferPermanentStorage: false, cancellationToken);
         return IOFile.OpenRead(localPath);
+    }
+
+    public async Task<string> DownloadSongToPermanentStorageAsync(string externalProvider, string externalId, CancellationToken cancellationToken = default)
+    {
+        if (SubsonicSettings.StorageMode == StorageMode.Cache)
+        {
+            Logger.LogInformation(
+                "Cache storage mode enabled. Track {TrackId} won't be downloaded to permanent storage.",
+                externalId
+            );
+        }
+        return await DownloadSongInternalAsync(
+            externalProvider,
+            externalId,
+            triggerAlbumDownload: true,
+            preferPermanentStorage: true,
+            cancellationToken
+        );
     }
 
     public DownloadInfo? GetDownloadStatus(string songId)
@@ -219,7 +237,7 @@ public abstract class BaseDownloadService : IDownloadService
     /// <summary>
     /// Internal method for downloading a song with control over album download triggering
     /// </summary>
-    protected async Task<string> DownloadSongInternalAsync(string externalProvider, string externalId, bool triggerAlbumDownload, CancellationToken cancellationToken = default)
+    protected async Task<string> DownloadSongInternalAsync(string externalProvider, string externalId, bool triggerAlbumDownload, bool preferPermanentStorage, CancellationToken cancellationToken = default)
     {
         if (externalProvider != ProviderName)
         {
@@ -227,7 +245,9 @@ public abstract class BaseDownloadService : IDownloadService
         }
 
         var songId = $"ext-{externalProvider}-{externalId}";
-        var isCache = SubsonicSettings.StorageMode == StorageMode.Cache;
+        var storageMode = SubsonicSettings.StorageMode;
+        var isCache = storageMode == StorageMode.Cache 
+            || (storageMode == StorageMode.Hybrid && !preferPermanentStorage);
 
         // Acquire lock BEFORE checking existence to prevent race conditions with concurrent requests
         await DownloadLock.WaitAsync(cancellationToken);
@@ -308,7 +328,7 @@ public abstract class BaseDownloadService : IDownloadService
             string localPath;
             await using (downloadResult.DownloadStream)
             {
-                localPath = await SaveDownloadStreamToFileAsync(downloadResult, song, cancellationToken);
+                localPath = await SaveDownloadStreamToFileAsync(downloadResult, song, preferPermanentStorage, cancellationToken);
             }
             song.LocalPath = localPath;
 
@@ -483,9 +503,12 @@ public abstract class BaseDownloadService : IDownloadService
     /// <param name="result">DownloadResult containing download Stream and quality string.</param>
     /// <param name="song">Song metadata to interpolate into storage template.</param>
     /// <returns></returns>
-    protected async Task<string> SaveDownloadStreamToFileAsync(DownloadResult result, Song song, CancellationToken cancellationToken)
+    protected async Task<string> SaveDownloadStreamToFileAsync(DownloadResult result, Song song, bool preferPermanentStorage, CancellationToken cancellationToken)
     {
-        var basePath = SubsonicSettings.StorageMode == StorageMode.Cache ? CachePath : DownloadPath;
+        var storageMode = SubsonicSettings.StorageMode;
+        bool toPermanent = storageMode == StorageMode.Permanent
+            || (storageMode == StorageMode.Hybrid && preferPermanentStorage);
+        var basePath = toPermanent ? DownloadPath : CachePath;
         var outputPath = PathHelper.BuildTrackPath(basePath, song, result.Extension, SubsonicSettings.FolderTemplate, result.DownloadedQuality);
 
         // Create directories
@@ -580,7 +603,7 @@ public abstract class BaseDownloadService : IDownloadService
                 }
 
                 Logger.LogInformation("Downloading track '{Title}' from album '{Album}'", track.Title, album.Title);
-                await DownloadSongInternalAsync(ProviderName, track.ExternalId!, triggerAlbumDownload: false, cancellationToken);
+                await DownloadSongInternalAsync(ProviderName, track.ExternalId!, triggerAlbumDownload: false, preferPermanentStorage: true, cancellationToken);
             }
             catch (Exception ex)
             {

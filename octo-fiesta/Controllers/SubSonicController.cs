@@ -796,8 +796,31 @@ public class SubsonicController : ControllerBase
         var starResolution = await ResolveExternalSongIdIfPossible(parameters, "star");
         if (starResolution is { IsExternalSong: true, Resolved: false })
         {
-            return _responseBuilder.CreateError(format, 70,
-                "External song could not be starred because it is not available locally yet.");
+            if (_subsonicSettings.StorageMode != StorageMode.Hybrid)
+            {
+                return _responseBuilder.CreateError(format, 70,
+                    "External song could not be starred because it is not available locally yet.");                
+            }
+
+            _logger.LogInformation(
+                "Hybrid storage mode enabled. Starting download of song {SongId}",
+                parameters["id"]
+            );
+
+            var (_, provider, _, externalId) = _localLibraryService.ParseExternalId(parameters["id"]);
+            _ = Task.Run(async () =>
+            {
+                try
+                {
+                    await _downloadService.DownloadSongToPermanentStorageAsync(provider!, externalId!);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "Failed to download song {SongId}", parameters["id"]);
+                }
+            });
+
+            return _responseBuilder.CreateResponse(format, "starred", new { });
         }
         
         // For non-playlist items, relay to real Subsonic server
